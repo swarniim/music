@@ -980,9 +980,10 @@ go();
 const QS=new URLSearchParams(location.search),RM=QS.get('remote'),PJ='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js',QRL='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
 const need=u=>new Promise((ok,no)=>{const x=document.createElement('script');x.src=u;x.onload=ok;x.onerror=no;document.head.appendChild(x)});
 const lib=async q=>{if(!window.Peer)await need(PJ);if(q&&!window.qrcode)await need(QRL)};
+const DEF='LESGOBABES',MAXS=8;
 const OK=/^#(b[a-z]{1,2}|uxb|fvb|bkb|vm|lyb|lyrs|lyfs|lyvo|lyav2)$|^#ly(st|fo|set) \[data-[sfd]="-?[a-z0-9.]+"\]$/;
-const sha=async s=>{s='swm1:'+s;try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,24)}catch(e){let h=5381,g=52711;for(const c of s){h=(h*33)^c.charCodeAt(0);g=(g*31+c.charCodeAt(0))|0}return(h>>>0).toString(16)+(g>>>0).toString(16)}};
-$('#rmb').style.display='none';
+const sha=async s=>{s='swm1:'+String(s).trim().toLowerCase();try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,24)}catch(e){let h=5381,g=52711;for(const c of s){h=(h*33)^c.charCodeAt(0);g=(g*31+c.charCodeAt(0))|0}return(h>>>0).toString(16)+(g>>>0).toString(16)}};
+if(RM)remote(RM,!/^sw[a-z0-9]{6}$/.test(RM));else host();
 /* ---------- the player (laptop) side ---------- */
 function host(){const bt=$('#rmb');if(location.protocol=='file:'){bt.style.display='none';return}
  D.forEach((x,i)=>x._i=i);let peer=null,adm=null,cs=new Set();const m=$('#rmm'),box=$('#rmx');
@@ -999,14 +1000,39 @@ function host(){const bt=$('#rmb');if(location.protocol=='file:'){bt.style.displ
    if(d.c=='next'){if(i>=0&&i!=qi){Q.splice(i,1);if(i<qi)qi--}Q.splice(qi+1,0,x);toast('Up next: '+x.t);try{show()}catch(z){}}
    else{if(i<0){Q.push(x);i=Q.length-1}load(i)}}
  }catch(z){}setTimeout(push,40)};
- const acc=c=>{cs.add(c);c.on('open',()=>{push();const r=$('#rms');if(r)r.textContent='Phone connected'});c.on('data',d=>cmd(d,c));c.on('close',()=>cs.delete(c));c.on('error',()=>cs.delete(c))};
- const reg=async()=>{const k=ld('rmkey');if(!k)return;try{await lib()}catch(z){return}const h=await sha(k);if(adm){try{adm.destroy()}catch(z){}adm=null}
-  for(let n=1;n<=8;n++){const p=await new Promise(res=>{let ok=0;const q=new Peer('swm-'+h+'-'+n);q.on('open',()=>{ok=1;res(q)});q.on('error',()=>{if(!ok){try{q.destroy()}catch(z){}res(null)}})});
-   if(p){adm=p;p.on('connection',acc);p.on('disconnected',()=>{try{p.reconnect()}catch(z){}});p.on('error',()=>{});const s=$('#rma');if(s)s.textContent='Admin screen is on: '+(ld('rmname')||'Screen '+n);return}}
-  const s=$('#rma');if(s)s.textContent='All 8 screen slots are busy.'};
- const draw=()=>{box.innerHTML='<b>Control from your phone</b><div id="rmq">Setting up...</div><hr><b>Admin screen</b><small>Name this screen and enter your master key. Then your master link lists it.</small><input id="rmn" placeholder="Screen name, e.g. Living room" maxlength="24"><input id="rmk" type="password" placeholder="Master key" autocomplete="off"><button class="lyc" id="rmsv">Save and register</button><div id="rma">'+(ld('rmkey')?'Registered with a saved key.':'Not registered.')+'</div>';
+ const acc=c=>{cs.add(c);const op=()=>{push();const r=$('#rms');if(r)r.textContent='Phone connected'};if(c.open)op();c.on('open',op);c.on('data',d=>cmd(d,c));c.on('close',()=>cs.delete(c));c.on('error',()=>cs.delete(c))};
+ let gen=0,rt=0;
+ const say=t=>{const s=$('#rma');if(s)s.textContent=t};
+ const retry=()=>{clearTimeout(rt);rt=setTimeout(reg,6000)};
+ const claim=(h,n)=>new Promise(res=>{let done=0;const fin=v=>{if(!done){done=1;res(v)}};const q=new Peer('swm-'+h+'-'+n);
+  q.on('open',()=>fin({p:q}));
+  q.on('error',e=>{if(done)return;try{q.destroy()}catch(z){}fin({e:e&&e.type})});
+  setTimeout(()=>{if(done)return;try{q.destroy()}catch(z){}fin({e:'timeout'})},9000)});
+ const go=async g=>{
+  try{await lib()}catch(z){say('Offline. Will keep trying.');return retry()}
+  if(g!=gen)return;
+  const h=await sha(ld('rmkey')||DEF);if(g!=gen)return;
+  if(adm){const old=adm;adm=null;try{old.destroy()}catch(z){}}
+  /* prefer the slot this device used last time, so "Screen 2" stays "Screen 2" */
+  const want=+ld('rmslot')||0,order=[];if(want>=1&&want<=MAXS)order.push(want,want,want);for(let n=1;n<=MAXS;n++)if(n!=want)order.push(n);
+  let prev=0;
+  for(const n of order){
+   if(n==prev)await new Promise(r=>setTimeout(r,1300));prev=n;
+   const r=await claim(h,n);
+   if(g!=gen){if(r.p)try{r.p.destroy()}catch(z){}return}
+   if(r.p){const p=r.p;adm=p;sv('rmslot',n);
+    p.on('connection',acc);
+    p.on('disconnected',()=>{try{p.reconnect()}catch(z){}});
+    p.on('close',()=>{if(adm===p){adm=null;retry()}});
+    p.on('error',()=>{});
+    say('Listed on your master link as: '+(ld('rmname')||'Screen '+n));return}
+   if(r.e!='unavailable-id'){say('Cannot reach the relay ('+r.e+'). Retrying...');return retry()}}
+  say('All '+MAXS+' screen slots are busy. Retrying...');retry()};
+ const reg=()=>{const g=++gen;clearTimeout(rt);go(g).catch(()=>{if(g==gen)retry()})};
+ const draw=()=>{const base=location.href.split('?')[0].split('#')[0],ml=base+'?remote='+(ld('rmkey')||DEF);
+  box.innerHTML='<b>Control from your phone</b><div id="rmq">Setting up...</div><hr><b>Master link</b><small>This screen shows up on the master link automatically, no QR code needed:</small><small>'+esc(ml)+'</small><input id="rmn" placeholder="Name for this screen (optional)" maxlength="24"><input id="rmk" type="password" placeholder="Custom master key (optional)" autocomplete="off"><button class="lyc" id="rmsv">Save</button><div id="rma">Registering...</div>';
   $('#rmn').value=ld('rmname')||'';$('#rmk').value=ld('rmkey')||'';
-  $('#rmsv').onclick=()=>{const k=$('#rmk').value.trim();sv('rmname',$('#rmn').value.trim());if(k)sv('rmkey',k);else try{localStorage.removeItem('rmkey')}catch(z){}$('#rma').textContent='Registering...';k?reg():($('#rma').textContent='Admin off.')}};
+  $('#rmsv').onclick=()=>{const k=$('#rmk').value.trim();sv('rmname',$('#rmn').value.trim());if(k)sv('rmkey',k);else try{localStorage.removeItem('rmkey')}catch(z){}say('Registering...');reg();draw()}};
  const open=async()=>{m.hidden=false;draw();if(peer&&!peer.destroyed&&peer.open)return qr();
   try{await lib(1)}catch(z){$('#rmq').textContent='The remote needs an internet connection to set up.';return}
   const id='sw'+Math.random().toString(36).slice(2,8);peer=new Peer(id);peer._id=id;
@@ -1014,7 +1040,7 @@ function host(){const bt=$('#rmb');if(location.protocol=='file:'){bt.style.displ
   peer.on('open',qr);peer.on('connection',acc)};
  const qr=()=>{const q=$('#rmq');if(!q||!peer)return;const base=location.href.split('?')[0].split('#')[0],u=base+'?remote='+peer._id,c=qrcode(0,'M');c.addData(u);c.make();q.innerHTML=c.createSvgTag(6,2)+'<small>'+esc(u)+'</small><div id="rms">Waiting for phone...</div>'};
  box.addEventListener('keydown',e=>e.stopPropagation());
- bt.onclick=open;m.onclick=e=>{if(e.target==m)m.hidden=true};setInterval(push,600);if(ld('rmkey'))reg()}
+ bt.onclick=open;m.onclick=e=>{if(e.target==m)m.hidden=true};setInterval(push,600);reg()}
 /* ---------- the phone side ---------- */
 async function remote(KEY,master){try{load=()=>{}}catch(z){}try{savePos=()=>{}}catch(z){}[V,A].forEach(e=>{e.muted=true;e.pause();e.removeAttribute('src');try{e.load()}catch(z){}});document.documentElement.classList.add('rem');
  const S0=(p,c)=>`<svg viewBox="0 0 24 24"${c?` class="${c}"`:''}>${p}</svg>`,
@@ -1070,15 +1096,17 @@ async function remote(KEY,master){try{load=()=>{}}catch(z){}try{savePos=()=>{}}c
  /* master: discover screens by probing the 8 slots that belong to this key */
  const h=await sha(KEY),pk=g('#rpk');let shown=1;pk.hidden=false;st('bad','Looking for screens');
  const live=()=>Object.keys(scr).map(Number).sort();
- const drawPk=()=>{const L=live();g('#rpl2').innerHTML=L.map(n=>{const s=scr[n].s||{};return`<button class="rm-sc${n==sel?' on':''}" data-scr="${n}"><i class="${s.pl?'pl':''}"></i><span><b>${esc(s.nm||'Screen '+n)}</b><small>${esc(s.t?s.t+' - '+s.a:'Nothing playing')}</small></span></button>`}).join('');g('#rpe').textContent=L.length?'':'No screens found yet. On a laptop open the player, tap the phone button, and register it with your master key.'};
+ const drawPk=()=>{const L=live();g('#rpl2').innerHTML=L.map(n=>{const s=scr[n].s||{};return`<button class="rm-sc${n==sel?' on':''}" data-scr="${n}"><i class="${s.pl?'pl':''}"></i><span><b>${esc(s.nm||'Screen '+n)}</b><small>${esc(s.t?s.t+' - '+s.a:'Nothing playing')}</small></span></button>`}).join('');g('#rpe').textContent=L.length?'':'No screens found yet. Open this website once on the TV or laptop and it will appear here by itself.'};
  const showPk=()=>{pk.hidden=false;shown=1;drawPk()};
  const pick=n=>{if(!scr[n])return;sel=n;cn=scr[n].c;pk.hidden=true;shown=0;st('ok',(scr[n].s&&scr[n].s.nm)||'Screen '+n);g('#rl').innerHTML='';if(scr[n].s)R(scr[n].s);send({c:'hello'});drawPk()};
- const probe=n=>{if(scr[n]&&scr[n].c.open)return;const c=p.connect('swm-'+h+'-'+n,{reliable:true}),o={c,s:null};const to=setTimeout(()=>{if(!c.open)try{c.close()}catch(z){}},5000);
+ const drop=(n,o)=>{if(scr[n]===o){delete scr[n];if(sel==n){sel=0;cn=null;st('bad','Screen went away');showPk()}else drawPk()}};
+ const probe=n=>{if(scr[n]&&scr[n].c.open)return;const c=p.connect('swm-'+h+'-'+n,{reliable:true}),o={c,s:null,ts:Date.now()};const to=setTimeout(()=>{if(!c.open)try{c.close()}catch(z){}},5000);
   c.on('open',()=>{clearTimeout(to);scr[n]=o;c.send({c:'hello'});drawPk()});
-  c.on('data',d=>{if(d.s){o.s=d.s;if(sel==n)R(d.s);if(shown)drawPk()}if(d.r&&sel==n)list(d.r)});
-  c.on('close',()=>{if(scr[n]===o){delete scr[n];if(sel==n){sel=0;cn=null;st('bad','Screen went away');showPk()}else drawPk()}})};
- const scan=()=>{for(let n=1;n<=8;n++)probe(n)};
- p.on('open',()=>{scan();setInterval(scan,4000);setTimeout(()=>{if(!sel&&live().length==1)pick(live()[0])},1600)});p.on('error',()=>{});
+  c.on('data',d=>{o.ts=Date.now();if(d.s){o.s=d.s;if(sel==n)R(d.s);if(shown)drawPk()}if(d.r&&sel==n)list(d.r)});
+  c.on('close',()=>drop(n,o))};
+ const scan=()=>{for(const k of Object.keys(scr)){const o=scr[k];if(Date.now()-o.ts>15000){try{o.c.close()}catch(z){}drop(+k,o)}}for(let n=1;n<=MAXS;n++)probe(n)};
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden){try{if(p.disconnected)p.reconnect()}catch(z){}scan()}});
+ p.on('disconnected',()=>{try{p.reconnect()}catch(z){}});p.on('open',()=>{scan();setInterval(scan,4000);setTimeout(()=>{if(!sel&&live().length==1)pick(live()[0])},1600)});p.on('error',()=>{});
 }
 })();
 ;(()=>{const b=$('#thb'),r=document.documentElement,SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',MOON='<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
