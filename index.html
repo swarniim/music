@@ -924,7 +924,7 @@ function setFs(x){fs=x;W.classList.toggle('fs',x);
  else{if(ph){ph.replaceWith(card);ph=null}B.classList.remove('lyfs','nopl');$('.vinw').appendChild(W)}
  fb.innerHTML=x?XX:EX;fb.title=x?'Close full screen (Esc)':'Full screen lyrics (Esc to close)';fp.title='Hide player';lay();setSong();sync();upd()}
 fp.onclick=e=>{e.stopPropagation();const h=B.classList.toggle('nopl');fp.title=h?'Show player':'Hide player';fp.setAttribute('aria-label',fp.title);fp.style.opacity=h?'.75':'';cardH();lastK='';sync()};
-fb.onclick=e=>{e.stopPropagation();setFs(!fs)};
+fb.onclick=e=>{e.stopPropagation();if(!fs)unvo();setFs(!fs)};
 document.addEventListener('keydown',e=>{if(e.key=='Escape'&&fs){e.stopPropagation();e.preventDefault();setFs(false)}},true);
 new ResizeObserver(()=>{li=-2;nl=-1;if(L&&ov.classList.contains('lsl')&&ov.firstChild){ov.firstChild.style.padding=ov.clientHeight/2+'px 0'}}).observe(ov);
 const place=()=>{const p=bar.offsetParent||bar.parentNode,pr=p.getBoundingClientRect(),a=lb.getBoundingClientRect(),z=$('#lyo').getBoundingClientRect(),Wd=Math.min(460,pr.width-12),cx=(a.left+z.right)/2-pr.left,l=Math.max(6,Math.min(cx-Wd*.2,pr.width-Wd-6));bar.style.left=l+'px';bar.style.width=Wd+'px';bar.style.bottom=(pr.bottom-a.top+6)+'px';bar.style.setProperty('--cx',(cx-l)+'px')};
@@ -953,11 +953,12 @@ ov.addEventListener('click',e=>{if(!timed||!key||!ov.classList.contains('lsl'))r
  toast('Synced to this line ('+(o>0?'+':'')+o.toFixed(1)+'s)')});
 ['pointerup','pointercancel','pointerleave'].forEach(n=>ov.addEventListener(n,()=>{down=false;hold=performance.now()+1500}));
 ov.addEventListener('wheel',()=>{hold=performance.now()+2000},{passive:true});
-lb.onclick=()=>{on=!on;sv('lyon',on?1:0);go()};
+const unvo=()=>{if(!vo)return false;vo=false;if(autoSw){autoSw=false;SW(prevM)}mark();sync();return true};
+lb.onclick=()=>{if(unvo()){on=true;sv('lyon',1)}else{on=!on;sv('lyon',on?1:0)}go()};
 $('#lyo').onclick=e=>{e.stopPropagation();bar.hidden=!bar.hidden;if(!bar.hidden)place()};
 bar.onclick=e=>{e.stopPropagation();const b=e.target.closest('button');if(!b)return;
- if(b.dataset.f){FS=b.dataset.f;sv('lyfont2',FS);if(!on){on=true;sv('lyon',1)}go();return}
- if(b.dataset.s){st=b.dataset.s;sv('lystyle',st);if(!on){on=true;sv('lyon',1)}go();return}
+ if(b.dataset.f){unvo();FS=b.dataset.f;sv('lyfont2',FS);if(!on){on=true;sv('lyon',1)}go();return}
+ if(b.dataset.s){unvo();st=b.dataset.s;sv('lystyle',st);if(!on){on=true;sv('lyon',1)}go();return}
  if(b.id=='lyav2'){autoV=!autoV;sv('lyautov',autoV?1:0);if(!autoV&&autoSw){autoSw=false;SW(prevM)}mark();setSong();return}
  if(b.classList.contains('lyh')){const sc=b.parentNode,o=!sc.classList.contains('open');bar.querySelectorAll('.lya').forEach(x=>x.classList.remove('open'));sc.classList.toggle('open',o);return}
  if(b.id=='lyvo'){if(!key)return;if(vo){vo=false;if(autoSw){autoSw=false;SW(prevM)}}else{vo=true;avDone=false;if(mode!='video'){prevM=mode;autoSw=true;SW('video');const t=$('#lyavt');if(t)t.textContent='Showing the video for this song only.'}}mark();sync();upd();return}
@@ -981,7 +982,7 @@ const need=u=>new Promise((ok,no)=>{const x=document.createElement('script');x.s
 const lib=async q=>{if(!window.Peer)await need(PJ);if(q&&!window.qrcode)await need(QRL)};
 const OK=/^#(b[a-z]{1,2}|uxb|fvb|bkb|vm|lyb|lyrs|lyfs|lyvo|lyav2)$|^#ly(st|fo|set) \[data-[sfd]="-?[a-z0-9.]+"\]$/;
 const sha=async s=>{s='swm1:'+s;try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,24)}catch(e){let h=5381,g=52711;for(const c of s){h=(h*33)^c.charCodeAt(0);g=(g*31+c.charCodeAt(0))|0}return(h>>>0).toString(16)+(g>>>0).toString(16)}};
-if(RM)remote(RM,!/^sw[a-z0-9]{6}$/.test(RM));else host();
+$('#rmb').style.display='none';
 /* ---------- the player (laptop) side ---------- */
 function host(){const bt=$('#rmb');if(location.protocol=='file:'){bt.style.display='none';return}
  D.forEach((x,i)=>x._i=i);let peer=null,adm=null,cs=new Set();const m=$('#rmm'),box=$('#rmx');
