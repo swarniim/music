@@ -568,24 +568,31 @@ const el=()=>mode=='video'?V:A;
 let DR=null;try{if(/^https?:$/.test(location.protocol)){const x=new XMLHttpRequest();x.open('GET','drive.json?'+Date.now(),false);x.send();if(x.status==200){DR=JSON.parse(x.responseText);if(!DR.files||!DR.key)DR=null}}}catch(e){DR=null}
 if(DR)$('#vol').max=1;
 let FM=null;const FU=new Map(),fileUrl=f=>{let u=FU.get(f);if(!u){u=URL.createObjectURL(f);FU.set(f,u)}return u};
+/* offline library: picked songs are kept inside this browser (IndexedDB), so they still play after a reload with no internet */
+const IDBP=()=>new Promise((ok,no)=>{try{const r=indexedDB.open('swsongs',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}catch(e){no(e)}});
+const keep=async(list)=>{try{const db=await IDBP();await new Promise((ok,no)=>{const t=db.transaction('f','readwrite'),o=t.objectStore('f');for(const x of list)o.put({rel:x.rel,blob:x.blob},x.id);t.oncomplete=ok;t.onerror=()=>no(t.error);t.onabort=()=>no(t.error)});try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}return true}catch(e){return false}};
+const restore=async()=>{try{const db=await IDBP();const all=await new Promise((ok,no)=>{const o=db.transaction('f').objectStore('f'),ks=o.getAllKeys(),vs=o.getAll();vs.onsuccess=()=>ok([ks.result,vs.result]);vs.onerror=()=>no(vs.error)});let n=0;FM=FM||new Map();all[0].forEach((k,i)=>{const v=all[1][i];if(!v||!v.blob)return;FM.set(k,v.blob);if(v.rel)FM.set(v.rel,v.blob);n++});return n}catch(e){return 0}};
+const FMR=restore();
 /* where songs come from, in order: a chosen folder, then this page's own MP3/MP4 folders (when opened locally) or Google Drive (when on the website); each is the other's backup */
 const LOCALISH=location.protocol=='file:'||/^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\]|[^.]+\.local)$/i.test(location.hostname);
 const cands=(s,m=mode)=>{const x=m=='video'?'.mp4':'.mp3',d=m=='video'?'MP4/':'MP3/',L=[];
  if(FM){const f=FM.get((d+s.p+x).toLowerCase())||FM.get('b:'+(s.p.split('/').pop()+x).toLowerCase());if(f)L.push(fileUrl(f))}
  const rel=d+s.p.split('/').map(encodeURIComponent).join('/')+x;
  let dv=null;if(DR){const id=DR.files[(d+s.p+x).toLowerCase()];if(id)dv='https://www.googleapis.com/drive/v3/files/'+id+'?alt=media&key='+DR.key}
- if(LOCALISH){L.push(rel);if(dv)L.push(dv)}else{if(dv)L.push(dv);L.push(rel)}
+ if(LOCALISH){L.push(rel);const lc=rel.replace(/^(MP3|MP4)\//,x=>x.toLowerCase());if(lc!=rel)L.push(lc);if(dv)L.push(dv)}else{if(dv)L.push(dv);L.push(rel)}
  return L};
 const url=(s,m=mode)=>cands(s,m)[0];
 const setSrc=(e,s,m)=>{e._cs=cands(s,m);e._ci=0;e.src=e._cs[0]};
 $('#bfo').onclick=()=>$('#fdir').click();
 $('#bfi').onclick=()=>$('#ffile').click();
-$('#fdir').onchange=$('#ffile').onchange=e=>{const fs=[...e.target.files];FM=FM||new Map();let n=0;
+$('#fdir').onchange=$('#ffile').onchange=e=>{const fs=[...e.target.files];FM=FM||new Map();let n=0;const sv2=[];
  for(const f of fs){const nm=f.name.toLowerCase();if(!/\.(mp3|mp4)$/.test(nm))continue;
   const rel=(f.webkitRelativePath||f.name).replace(/\\/g,'/').split('/'),i=rel.findIndex(x=>/^mp[34]$/i.test(x));
-  if(i>=0)FM.set((rel[i]+'/'+rel.slice(i+1).join('/')).toLowerCase(),f);
-  FM.set('b:'+nm,f);n++}
- toast(n?n+' songs ready. Playing from the folder you picked.':'No MP3 or MP4 files found in that choice.');
+  const rk=i>=0?(rel[i]+'/'+rel.slice(i+1).join('/')).toLowerCase():'';
+  if(rk)FM.set(rk,f);
+  FM.set('b:'+nm,f);n++;sv2.push({id:'b:'+nm,rel:rk,blob:f})}
+ keep(sv2).then(ok=>{if(n)toast(ok?n+' songs ready and saved on this device for offline.':n+' songs ready (could not save offline, they last until you close the page).')});
+ if(!n)toast('No MP3 or MP4 files found in that choice.');
  if(n&&qi>=0)load(qi,0,true);e.target.value=''};
 const fmt=t=>isFinite(t)?Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0'):'0:00';
 const hms=t=>{t=Math.floor(t||0);return [t/3600|0,t/60%60|0,t%60].map(n=>String(n).padStart(2,'0')).join(':')};
@@ -753,7 +760,7 @@ function look(s){let h=2166136261;for(const c of s.t+'|'+s.a)h=Math.imul(h^c.cha
  rc.style.setProperty('--cdbg',pk<2?`conic-gradient(from ${from}deg,#cfd8ee,#f1d3ec,#d3f1e6,#f3eec6,#c9dcff,#efcde4,#d4eff3,#f0edcc,#cfd8ee)`:`conic-gradient(from ${from}deg,${[0,1,2,3,4,5,6,7,0].map(i=>`hsl(${P[0]+(i%2?10:-10)} ${P[1]}% ${i%2?93:79}%)`).join(',')})`);
  const side=R(2);if(side!=cdSide){cdSide=side;B.classList.add('anim');setTimeout(()=>B.classList.remove('anim'),700)}ghostLook(R,hu)}
 /* start up: restore exactly where we left off, else the whole library is the default playlist */
-setVol(1);pv(sk);if(DR)setTimeout(()=>toast('Online mode: playing from your Google Drive.'),700);$('#bt').innerHTML=ic('play');setHid(0,0);
+FMR.then(n=>{if(n&&qi>=0&&el().paused)try{load(qi,el().currentTime||0,false)}catch(e){}});setVol(1);pv(sk);if(DR)setTimeout(()=>toast('Online mode: playing from your Google Drive.'),700);$('#bt').innerHTML=ic('play');setHid(0,0);
 let ps=null;try{ps=JSON.parse(ld('pos'))}catch(e){}
 const pn=ld('pn');B.classList.toggle('open',pn?pn=='1':innerWidth>=900&&innerHeight>=561);dr(B.classList.contains('open'));
 setMode(ld('mode')||(ps&&ps.m));
@@ -1180,4 +1187,55 @@ async function remote(KEY,master){try{load=()=>{}}catch(z){}try{savePos=()=>{}}c
 ;(()=>{const b=$('#thb'),r=document.documentElement,SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',MOON='<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
 let t=ld('theme')||'light';const ap=()=>{r.dataset.theme=t;b.innerHTML=t=='dark'?SUN:MOON;b.title=t=='dark'?'Switch to light mode':'Switch to dark mode';b.setAttribute('aria-pressed',t=='dark')};
 b.onclick=()=>{t=t=='dark'?'light':'dark';sv('theme',t);ap()};ap()})();
-</script></body></html>
+/* offline page shell */
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+<script>
+/* Save-for-offline: downloads a chosen set from Drive straight into this browser */
+(function(){
+const bt=document.createElement('button');bt.type='button';bt.textContent='⬇ Offline';
+bt.style.cssText='position:fixed;right:10px;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:150;padding:.5rem .8rem;border-radius:2rem;border:1px solid #888;background:#f2ead6;color:#262432;font:600 14px system-ui,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.3)';
+const pn=document.createElement('div');pn.hidden=true;
+pn.style.cssText='position:fixed;left:10px;right:10px;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:150;padding:12px;border-radius:12px;border:1px solid #888;background:#f2ead6;color:#262432;font:14px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4)';
+pn.innerHTML='<div style="font-weight:700;margin-bottom:6px">Save songs on this device</div>'
++'<label>Nepali <input id="sxn" type="number" min="0" max="250" value="30" style="width:4.5em"></label> '
++'<label style="margin-left:8px">Old Hindi <input id="sxh" type="number" min="0" max="82" value="20" style="width:4.5em"></label>'
++'<div style="margin:8px 0"><button id="sxg" style="padding:.4rem .8rem">Start</button> <button id="sxs" style="padding:.4rem .8rem" hidden>Stop</button></div>'
++'<div id="sxt" style="font-size:13px;min-height:2.4em"></div>';
+document.body.append(bt,pn);
+bt.onclick=()=>pn.hidden=!pn.hidden;
+const T=m=>document.getElementById('sxt').textContent=m;
+let stop=false,busy=false;
+const bn=s=>(s.p.split('/').pop()+'.mp3').toLowerCase();
+const pick=()=>{const nn=+document.getElementById('sxn').value||0,hh=+document.getElementById('sxh').value||0;
+ const rk=x=>[x.u!='E',!x.f];const cmp=(a,b)=>{const A=rk(a),B=rk(b);return A[0]-B[0]||A[1]-B[1]};
+ const N=D.filter(x=>x.l=='Nepali').sort(cmp).slice(0,nn);
+ const H=D.filter(x=>x.l=='Hindi'&&x.y&&x.y<=1982).sort((a,b)=>(!a.f-!b.f)||a.y-b.y).slice(0,hh);
+ return N.concat(H)};
+document.getElementById('sxs').onclick=()=>{stop=true;T('Stopping after the current songs...')};
+document.getElementById('sxg').onclick=async()=>{
+ if(busy)return;
+ if(!DR){T('Needs the online GitHub page (Drive list not found). Open the site, not the local file.');return}
+ busy=true;stop=false;document.getElementById('sxs').hidden=false;
+ FM=FM||new Map();try{await FMR}catch(e){}
+ const list=pick().filter(s=>!FM.has('b:'+bn(s))),total=list.length;let done=0,bad=0,i=0;
+ if(!total){T('Those are already saved.');busy=false;document.getElementById('sxs').hidden=true;return}
+ const one=async s=>{
+  const rel='mp3/'+s.p.toLowerCase()+'.mp3',id=DR.files['mp3/'+s.p.toLowerCase()+'.mp3']||DR.files[('MP3/'+s.p+'.mp3').toLowerCase()];
+  try{
+   let r=null;
+   if(id){try{r=await fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media&key='+DR.key);if(!r.ok)r=null}catch(e){r=null}}
+   if(!r){try{r=await fetch('MP3/'+s.p.split('/').map(encodeURIComponent).join('/')+'.mp3');if(!r.ok)r=null}catch(e){r=null}}
+   if(!r)throw 0;
+   const b=await r.blob();if(b.size<50000)throw 0;
+   const ok=await keep([{id:'b:'+bn(s),rel:rel,blob:b}]);
+   FM.set('b:'+bn(s),b);FM.set(rel,b);if(!ok)bad++;done++;
+  }catch(e){bad++}
+  T('Saved '+done+' of '+total+(bad?' ('+bad+' failed)':'')+'. Keep this page open.')};
+ const w=async()=>{while(!stop&&i<list.length){const s=list[i++];await one(s)}};
+ await Promise.all([w(),w(),w()]);
+ T((stop?'Stopped. ':'Done. ')+done+' songs saved'+(bad?', '+bad+' failed (Drive may be limiting downloads, try again later)':'')+'. Tip: tap the headphones button for Audio only.');
+ busy=false;document.getElementById('sxs').hidden=true};
+})();
+</script>
+</body></html>
